@@ -525,38 +525,45 @@ def main():
                 
                 # Run minimization
                 with st.spinner("Optimizing function..."):
-                    x_opt, f_opt, log_output = optimizer.minimize(torch_func, initial_params)
-                
-                # Display results
-                st.header("Optimization Results")
-                
-                # Show optimal parameters
-                st.subheader("Optimal Parameters")
-                
-                opt_params = x_opt.numpy()
-                cols = st.columns(len(variables))
-                
-                for i, (var, col) in enumerate(zip(variables, cols)):
-                    with col:
-                        st.metric(f"Optimal {var}", f"{opt_params[i]:.6f}")
-                
-                # Show optimal function value
-                st.metric("Optimal Function Value", f"{f_opt:.6f}")
-                
-                # Show convergence info
-                st.subheader("Convergence Information")
-                st.text(f"Converged after {optimizer.iterations} iterations")
-                
-                # Plot trajectory
-                if len(variables) <= 2:  # Only plot for 1D and 2D
-                    st.subheader("Optimization Trajectory")
-                    fig = optimizer.plot_trajectory(torch_func, bounds=plot_bounds, contour=use_contour)
-                    st.pyplot(fig)
-                
-                # Display optimization log
-                with st.expander("Optimization Log", expanded=False):
-                    for line in log_output:
-                        st.text(line)
+                    try:
+                        x_opt, f_opt, log_output = optimizer.minimize(torch_func, initial_params)
+                        
+                        # Check if there was an error
+                        if log_output and log_output[0].startswith("Error"):
+                            st.error(log_output[0])
+                        else:
+                            # Display results
+                            st.header("Optimization Results")
+                            
+                            # Show optimal parameters
+                            st.subheader("Optimal Parameters")
+                            
+                            opt_params = x_opt.numpy()
+                            cols = st.columns(len(variables))
+                            
+                            for i, (var, col) in enumerate(zip(variables, cols)):
+                                with col:
+                                    st.metric(f"Optimal {var}", f"{opt_params[i]:.6f}")
+                            
+                            # Show optimal function value
+                            st.metric("Optimal Function Value", f"{f_opt:.6f}")
+                            
+                            # Show convergence info
+                            st.subheader("Convergence Information")
+                            st.text(f"Converged after {optimizer.iterations} iterations")
+                            
+                            # Plot trajectory
+                            if len(variables) <= 2:  # Only plot for 1D and 2D
+                                st.subheader("Optimization Trajectory")
+                                fig = optimizer.plot_trajectory(torch_func, bounds=plot_bounds, contour=use_contour)
+                                st.pyplot(fig)
+                            
+                            # Display optimization log
+                            with st.expander("Optimization Log", expanded=False):
+                                for line in log_output:
+                                    st.text(line)
+                    except Exception as e:
+                        st.error(f"Optimization failed: {str(e)}")
             else:
                 st.error("Failed to convert expression to function. Please check your syntax.")
         else:
