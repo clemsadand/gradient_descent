@@ -13,67 +13,78 @@ class GradientDescentOptimizer:
     """A simple gradient descent optimizer using PyTorch's automatic differentiation."""
     
     def __init__(self, 
-                 learning_rate: float = 0.1, 
-                 epsilon: float = 1e-6,
-                 max_iterations: int = 1000,
-                 stopping_criterion: str = 'function_diff',
-                 verbose: bool = True):
-        """
-        Initialize the optimizer.
-        
-        Args:
-            learning_rate: Step size for gradient descent
-            epsilon: Convergence threshold
-            max_iterations: Maximum number of iterations
-            stopping_criterion: One of 'function_diff', 'param_diff', 'gradient_norm'
-            verbose: Whether to print progress information
-        """
-        self.learning_rate = learning_rate
-        self.epsilon = epsilon
-        self.max_iterations = max_iterations
-        self.stopping_criterion = stopping_criterion
-        self.verbose = verbose
-        self.iterations = 0
-        self.trajectory = []
+             learning_rate: float = 0.1, 
+             epsilon: float = 1e-6,
+             max_iterations: int = 1000,
+             stopping_criterion: str = 'function_diff',
+             verbose: bool = True):
+    """
+    Initialize the optimizer.
     
-    def minimize(self, func: Callable, initial_params: Union[float, List[float], torch.Tensor]) -> Tuple[torch.Tensor, float]:
-        """
-        Minimize a function using gradient descent with automatic differentiation.
+    Args:
+        learning_rate: Step size for gradient descent
+        epsilon: Convergence threshold
+        max_iterations: Maximum number of iterations
+        stopping_criterion: One of 'function_diff', 'param_diff', 'gradient_norm'
+        verbose: Whether to print progress information
+    """
+    self.learning_rate = learning_rate
+    self.epsilon = epsilon
+    self.max_iterations = max_iterations
+    self.stopping_criterion = stopping_criterion
+    self.verbose = verbose
+    self.iterations = 0
+    self.trajectory = []
+
+def minimize(self, func: Callable, initial_params: Union[float, List[float], torch.Tensor]) -> Tuple[torch.Tensor, float, List[str]]:
+    """
+    Minimize a function using gradient descent with automatic differentiation.
+    
+    Args:
+        func: Function to minimize
+        initial_params: Initial parameters (can be a scalar, list, or tensor)
         
-        Args:
-            func: Function to minimize
-            initial_params: Initial parameters (can be a scalar, list, or tensor)
-            
-        Returns:
-            Tuple of (optimal parameters, optimal function value)
-        """
-        # Convert initial parameters to tensor and set requires_grad
-        if isinstance(initial_params, (int, float)):
-            x = torch.tensor([float(initial_params)], requires_grad=True)
-        elif isinstance(initial_params, list):
-            x = torch.tensor(initial_params, dtype=torch.float32, requires_grad=True)
-        elif isinstance(initial_params, torch.Tensor):
-            x = initial_params.clone().detach().requires_grad_(True)
-        else:
-            raise TypeError("initial_params must be a number, list, or tensor")
-        
-        self.iterations = 0
-        self.trajectory = [x.clone().detach().numpy()]
-        
-        prev_x = x.clone().detach()
+    Returns:
+        Tuple of (optimal parameters, optimal function value, log output)
+    """
+    # Convert initial parameters to tensor and set requires_grad
+    if isinstance(initial_params, (int, float)):
+        x = torch.tensor([float(initial_params)], requires_grad=True)
+    elif isinstance(initial_params, list):
+        x = torch.tensor(initial_params, dtype=torch.float32, requires_grad=True)
+    elif isinstance(initial_params, torch.Tensor):
+        x = initial_params.clone().detach().requires_grad_(True)
+    else:
+        raise TypeError("initial_params must be a number, list, or tensor")
+    
+    self.iterations = 0
+    self.trajectory = [x.clone().detach().numpy()]
+    
+    prev_x = x.clone().detach()
+    
+    try:
+        # Try to evaluate function at initial point
         prev_f_val = func(prev_x).item()
-        
-        log_output = []
-        if self.verbose:
-            log_output.append(f"Iter {0}: Params {prev_x.detach().numpy()} Function value {prev_f_val:.6f}")
-        
-        while self.iterations < self.max_iterations:
+    except Exception as e:
+        return x.detach(), 0.0, [f"Error evaluating function: {str(e)}"]
+    
+    log_output = []
+    if self.verbose:
+        log_output.append(f"Iter {0}: Params {prev_x.detach().numpy()} Function value {prev_f_val:.6f}")
+    
+    while self.iterations < self.max_iterations:
+        try:
             # Compute function value
             f_val = func(x)
             
             # Compute gradients
-            f_val.backward()
+            f_val.backward(retain_graph=True)
             
+            # Check if gradients are computed correctly
+            if x.grad is None:
+                log_output.append("Error: Gradients are None. The function may not be differentiable.")
+                break
+                
             with torch.no_grad():
                 # Update parameters
                 x_new = x - self.learning_rate * x.grad
@@ -108,102 +119,114 @@ class GradientDescentOptimizer:
                 
                 if converged:
                     break
-        
-        # Final function value
+        except Exception as e:
+            log_output.append(f"Error during optimization iteration {self.iterations}: {str(e)}")
+            break
+    
+    # Final function value
+    try:
         final_f_val = func(x).item()
-        
-        if self.verbose:
-            log_output.append(f"\nTotal iterations: {self.iterations}")
-            log_output.append(f"Optimal parameters: {x.detach().numpy()}")
-            log_output.append(f"Optimal function value: {final_f_val:.6f}")
-        
-        return x.detach(), final_f_val, log_output
+    except Exception as e:
+        log_output.append(f"Error evaluating final function value: {str(e)}")
+        final_f_val = prev_f_val  # Use last successfully computed value
     
-    def plot_trajectory(self, func: Callable, bounds: List[float] = None, contour: bool = False):
-        """
-        Plot the optimization trajectory.
-        
-        Args:
-            func: The objective function
-            bounds: Plot bounds [x_min, x_max] for 1D or [x_min, x_max, y_min, y_max] for 2D
-            contour: Whether to plot contour for 2D functions
-        """
-        trajectory = np.array(self.trajectory)
-        dim = trajectory.shape[1]
-        
+    if self.verbose:
+        log_output.append(f"\nTotal iterations: {self.iterations}")
+        log_output.append(f"Optimal parameters: {x.detach().numpy()}")
+        log_output.append(f"Optimal function value: {final_f_val:.6f}")
+    
+    return x.detach(), final_f_val, log_output
+
+def plot_trajectory(self, func: Callable, bounds: List[float] = None, contour: bool = False):
+    """
+    Plot the optimization trajectory.
+    
+    Args:
+        func: The objective function
+        bounds: Plot bounds [x_min, x_max] for 1D or [x_min, x_max, y_min, y_max] for 2D
+        contour: Whether to plot contour for 2D functions
+    """
+    trajectory = np.array(self.trajectory)
+    dim = trajectory.shape[1]
+    
+    fig = plt.figure(figsize=(10, 6))
+    
+    if dim == 1:
+        self._plot_1d_trajectory(func, trajectory, bounds, fig)
+    elif dim == 2:
+        self._plot_2d_trajectory(func, trajectory, bounds, contour, fig)
+    else:
+        plt.text(0.5, 0.5, f"Cannot visualize trajectory for {dim}-dimensional parameters", 
+                 ha='center', va='center', fontsize=12)
+        plt.axis('off')
+    
+    return fig
+
+def _plot_1d_trajectory(self, func, trajectory, bounds=None, fig=None):
+    """Plot trajectory for 1D optimization"""
+    if fig is None:
         fig = plt.figure(figsize=(10, 6))
-        
-        if dim == 1:
-            self._plot_1d_trajectory(func, trajectory, bounds, fig)
-        elif dim == 2:
-            self._plot_2d_trajectory(func, trajectory, bounds, contour, fig)
-        else:
-            plt.text(0.5, 0.5, f"Cannot visualize trajectory for {dim}-dimensional parameters", 
-                     ha='center', va='center', fontsize=12)
-            plt.axis('off')
-        
-        return fig
     
-    def _plot_1d_trajectory(self, func, trajectory, bounds=None, fig=None):
-        """Plot trajectory for 1D optimization"""
-        if fig is None:
-            fig = plt.figure(figsize=(10, 6))
-        
-        # Set bounds if not provided
-        if bounds is None:
-            min_x = min(trajectory.min() - 1, -5)
-            max_x = max(trajectory.max() + 1, 5)
-            bounds = [min_x, max_x]
-        
-        # Plot function
-        x = np.linspace(bounds[0], bounds[1], 1000)
-        y = [func(torch.tensor([float(xi)])).item() for xi in x]
+    # Set bounds if not provided
+    if bounds is None:
+        min_x = min(trajectory.min() - 1, -5)
+        max_x = max(trajectory.max() + 1, 5)
+        bounds = [min_x, max_x]
+    
+    # Plot function
+    x = np.linspace(bounds[0], bounds[1], 1000)
+    try:
+        y = [func(torch.tensor([float(xi)], requires_grad=False)).item() for xi in x]
         plt.plot(x, y, 'b-', label='Function')
         
         # Plot trajectory points
-        f_vals = [func(torch.tensor([float(xi)])).item() for xi in trajectory]
+        f_vals = [func(torch.tensor([float(xi)], requires_grad=False)).item() for xi in trajectory]
         plt.plot(trajectory, f_vals, 'ro-', label='Optimization path')
         
         # Highlight start and end points
         plt.plot(trajectory[0], f_vals[0], 'g*', markersize=10, label='Start')
         plt.plot(trajectory[-1], f_vals[-1], 'y*', markersize=10, label='End')
-        
-        plt.xlabel('x')
-        plt.ylabel('f(x)')
-        plt.title('Optimization Trajectory')
-        plt.legend()
-        plt.grid(True)
-        
-        return fig
+    except Exception as e:
+        plt.text(0.5, 0.5, f"Error plotting function: {str(e)}", 
+                ha='center', va='center', fontsize=12, transform=plt.gca().transAxes)
     
-    def _plot_2d_trajectory(self, func, trajectory, bounds=None, contour=True, fig=None):
-        """Plot trajectory for 2D optimization"""
-        if fig is None:
-            fig = plt.figure(figsize=(10, 8))
-        
-        # Set bounds if not provided
-        if bounds is None:
-            margin = 1.0
-            min_x = trajectory[:, 0].min() - margin
-            max_x = trajectory[:, 0].max() + margin
-            min_y = trajectory[:, 1].min() - margin
-            max_y = trajectory[:, 1].max() + margin
-            bounds = [min_x, max_x, min_y, max_y]
-        
+    plt.xlabel('x')
+    plt.ylabel('f(x)')
+    plt.title('Optimization Trajectory')
+    plt.legend()
+    plt.grid(True)
+    
+    return fig
+
+def _plot_2d_trajectory(self, func, trajectory, bounds=None, contour=True, fig=None):
+    """Plot trajectory for 2D optimization"""
+    if fig is None:
+        fig = plt.figure(figsize=(10, 8))
+    
+    # Set bounds if not provided
+    if bounds is None:
+        margin = 1.0
+        min_x = trajectory[:, 0].min() - margin
+        max_x = trajectory[:, 0].max() + margin
+        min_y = trajectory[:, 1].min() - margin
+        max_y = trajectory[:, 1].max() + margin
+        bounds = [min_x, max_x, min_y, max_y]
+    
+    try:
         if contour:
             # Create mesh grid for contour plot
-            x = np.linspace(bounds[0], bounds[1], 100)
-            y = np.linspace(bounds[2], bounds[3], 100)
+            x = np.linspace(bounds[0], bounds[1], 50)  # Reduced from 100 to 50 for performance
+            y = np.linspace(bounds[2], bounds[3], 50)
             X, Y = np.meshgrid(x, y)
             Z = np.zeros_like(X)
             
             # Evaluate function at grid points
             for i in range(X.shape[0]):
                 for j in range(X.shape[1]):
-                    Z[i, j] = func(torch.tensor([float(X[i, j]), float(Y[i, j])])).item()
+                    Z[i, j] = func(torch.tensor([float(X[i, j]), float(Y[i, j])], requires_grad=False)).item()
             
             # Plot contour
-            plt.contourf(X, Y, Z, 50, cmap='viridis', alpha=0.7)
+            plt.contourf(X, Y, Z, 20, cmap='viridis', alpha=0.7)  # Reduced from 50 to 20 levels
             plt.colorbar(label='f(x, y)')
             plt.contour(X, Y, Z, 10, colors='k', alpha=0.3)
         
@@ -211,14 +234,17 @@ class GradientDescentOptimizer:
         plt.plot(trajectory[:, 0], trajectory[:, 1], 'r-o', label='Optimization path')
         plt.plot(trajectory[0, 0], trajectory[0, 1], 'g*', markersize=10, label='Start')
         plt.plot(trajectory[-1, 0], trajectory[-1, 1], 'y*', markersize=10, label='End')
-        
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.title('Optimization Trajectory')
-        plt.legend()
-        plt.grid(True)
-        
-        return fig
+    except Exception as e:
+        plt.text(0.5, 0.5, f"Error plotting function: {str(e)}", 
+                ha='center', va='center', fontsize=12, transform=plt.gca().transAxes)
+    
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title('Optimization Trajectory')
+    plt.legend()
+    plt.grid(True)
+    
+    return fig
 
 # Helper functions for parsing symbolic expressions
 def sympy_to_torch_function(expr_str, variables):
